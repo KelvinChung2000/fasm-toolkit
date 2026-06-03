@@ -1,4 +1,4 @@
-"""fasm-toolkit: a modern FPGA Assembly (FASM) parser and manipulation toolkit.
+r"""fasm-toolkit: a modern FPGA Assembly (FASM) parser and manipulation toolkit.
 
 The pipeline is parse -> IR -> manipulate -> emit:
 
@@ -14,11 +14,25 @@ equal IR.
 
 from loguru import logger
 
+from fasm_toolkit.dsl import (
+    Editor,
+    FasmBuilder,
+    Selection,
+    bits,
+    edit,
+)
 from fasm_toolkit.emit import (
     feature_value_to_string,
     line_to_string,
     set_feature_to_string,
     to_string,
+)
+from fasm_toolkit.errors import (
+    FasmBuildError,
+    FasmError,
+    FasmMergeError,
+    FasmSyntaxError,
+    FasmValidationError,
 )
 from fasm_toolkit.ir import (
     Address,
@@ -30,9 +44,6 @@ from fasm_toolkit.ir import (
     ValueFormat,
 )
 from fasm_toolkit.parser import (
-    FasmError,
-    FasmSyntaxError,
-    FasmValidationError,
     parse_file,
     parse_string,
 )
@@ -55,9 +66,18 @@ __all__ = [
     # parsing
     "parse_string",
     "parse_file",
+    # errors
     "FasmError",
     "FasmSyntaxError",
     "FasmValidationError",
+    "FasmMergeError",
+    "FasmBuildError",
+    # eDSL (FASM++)
+    "FasmBuilder",
+    "bits",
+    "edit",
+    "Editor",
+    "Selection",
     # emit
     "to_string",
     "line_to_string",
@@ -75,4 +95,10 @@ __all__ = [
 # enables it (see fasm_toolkit.cli).
 logger.disable("fasm_toolkit")
 
-__version__ = "0.1.0"
+try:
+    from importlib.metadata import PackageNotFoundError
+    from importlib.metadata import version as _version
+
+    __version__ = _version("fasm-toolkit")
+except PackageNotFoundError:  # pragma: no cover
+    __version__ = "0.0.0"

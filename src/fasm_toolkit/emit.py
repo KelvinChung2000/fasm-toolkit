@@ -24,6 +24,7 @@ __all__ = [
     "line_to_string",
     "set_feature_to_string",
     "feature_value_to_string",
+    "escape_annotation_value",
 ]
 
 
@@ -51,6 +52,7 @@ def _address_to_string(address: Address) -> str:
 
 
 def set_feature_to_string(feature: SetFeature) -> str:
+    """Render a feature assignment, e.g. ``a[3:0] = 4'b1010``."""
     out = feature.name
     if feature.address is not None:
         out += _address_to_string(feature.address)
@@ -59,12 +61,26 @@ def set_feature_to_string(feature: SetFeature) -> str:
     return out
 
 
+def escape_annotation_value(value: str) -> str:
+    """Escape a logical annotation value into ESCAPED_STRING inner text.
+
+    The inverse of the parser's unescaping: a backslash or double quote in the
+    value is escaped so the emitted ``"..."`` literal re-parses to the same
+    logical value. Backslash is escaped first so a value's quotes are not
+    double-counted.
+    """
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _annotations_to_string(annotations: tuple[Annotation, ...]) -> str:
-    body = ", ".join(f'{a.name} = "{a.value}"' for a in annotations)
+    body = ", ".join(
+        f'{a.name} = "{escape_annotation_value(a.value)}"' for a in annotations
+    )
     return f"{{ {body} }}"
 
 
 def line_to_string(line: FasmLine) -> str:
+    """Render a whole line: feature, annotations, and comment, space-joined."""
     parts: list[str] = []
     if line.feature is not None:
         parts.append(set_feature_to_string(line.feature))

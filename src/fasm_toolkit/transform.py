@@ -12,10 +12,12 @@ The logic mirrors the reference ``fasm`` library so output matches bit for bit.
 
 import enum
 from collections.abc import Callable, Iterator
+from typing import Any
 
 from loguru import logger
 
 from fasm_toolkit.emit import set_feature_to_string
+from fasm_toolkit.errors import FasmMergeError
 from fasm_toolkit.ir import (
     Address,
     FasmFile,
@@ -64,14 +66,17 @@ def canonical_set_features(feature: SetFeature) -> Iterator[SetFeature]:
 
 
 def canonicalize(file: FasmFile) -> FasmFile:
-    """Return the canonical form of ``file`` as a sorted, de-duplicated
-    :class:`FasmFile` (comments and annotations are dropped)."""
+    """Return the canonical form: a sorted, de-duplicated, comment-free file."""
     by_string: dict[str, SetFeature] = {}
     for feature in file.features():
         for canonical in canonical_set_features(feature):
             by_string[set_feature_to_string(canonical)] = canonical
     lines = tuple(FasmLine(feature=by_string[key]) for key in sorted(by_string))
-    logger.debug("canonicalize: {} line(s) -> {} canonical feature(s)", len(file.lines), len(lines))
+    logger.debug(
+        "canonicalize: {} line(s) -> {} canonical feature(s)",
+        len(file.lines),
+        len(lines),
+    )
     return FasmFile(lines)
 
 
@@ -82,7 +87,7 @@ def merge_features(features: list[SetFeature]) -> SetFeature:
     """
     names = {feature.name for feature in features}
     if len(names) != 1:
-        raise ValueError(f"merge_features requires one feature name, got {names}")
+        raise FasmMergeError(f"merge_features requires one feature name, got {names}")
 
     set_bits: set[int] = set()
     cleared_bits: set[int] = set()
@@ -96,14 +101,15 @@ def merge_features(features: list[SetFeature]) -> SetFeature:
         value = 1 if feature.value is None else feature.value.value
 
         for bit in range(low, high + 1):
-            if (value >> (bit - low)) & 1:
-                if bit in cleared_bits:
-                    raise ValueError(f"bit {bit} of {feature.name} both set and cleared")
-                set_bits.add(bit)
-            else:
-                if bit in set_bits:
-                    raise ValueError(f"bit {bit} of {feature.name} both set and cleared")
-                cleared_bits.add(bit)
+            is_set = (value >> (bit - low)) & 1
+            target, other = (
+                (set_bits, cleared_bits) if is_set else (cleared_bits, set_bits)
+            )
+            if bit in other:
+                raise FasmMergeError(
+                    f"bit {bit} of {feature.name} is both set and cleared"
+                )
+            target.add(bit)
 
     max_bit = max(set_bits | cleared_bits)
     final_value = 0
@@ -228,7 +234,7 @@ class _MergeModel:
     def sorted_lines(
         self,
         zero_function: Callable[[str], bool] | None,
-        sort_key: Callable[[str], object] | None,
+        sort_key: Callable[[str], Any] | None,
     ) -> list[FasmLine]:
         feature_groups: dict[str, list[list[FasmLine]]] = {}
         non_feature_groups: list[list[FasmLine]] = []
@@ -280,7 +286,7 @@ def merge_and_sort(
     file: FasmFile,
     *,
     zero_function: Callable[[str], bool] | None = None,
-    sort_key: Callable[[str], object] | None = None,
+    sort_key: Callable[[str], Any] | None = None,
 ) -> FasmFile:
     """Group, merge bit ranges, and sort a file for tidy non-canonical output.
 
@@ -298,5 +304,7 @@ def merge_and_sort(
     model.finish()
     model.merge_addresses()
     result = FasmFile(tuple(model.sorted_lines(zero_function, sort_key)))
-    logger.debug("merge_and_sort: {} line(s) -> {} line(s)", len(file.lines), len(result.lines))
+    logger.debug(
+        "merge_and_sort: {} line(s) -> {} line(s)", len(file.lines), len(result.lines)
+    )
     return result

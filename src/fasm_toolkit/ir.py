@@ -19,6 +19,7 @@ Design notes:
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, replace
 from enum import Enum
+from typing import Any
 
 __all__ = [
     "ValueFormat",
@@ -54,6 +55,7 @@ class FeatureValue:
     format: ValueFormat
 
     def __post_init__(self) -> None:
+        """Reject negative values."""
         if self.value < 0:
             raise ValueError(f"feature value must be non-negative, got {self.value}")
 
@@ -71,12 +73,11 @@ class Address:
     high: int | None = None
 
     def __post_init__(self) -> None:
+        """Reject negative indices and ranges with high below low."""
         if self.low < 0:
             raise ValueError(f"address index must be non-negative, got {self.low}")
         if self.high is not None and self.high < self.low:
-            raise ValueError(
-                f"address high ({self.high}) must be >= low ({self.low})"
-            )
+            raise ValueError(f"address high ({self.high}) must be >= low ({self.low})")
 
     @property
     def width(self) -> int:
@@ -105,6 +106,17 @@ class SetFeature:
         """The width used when emitting the value (derived from the address)."""
         return self.address.width if self.address is not None else 1
 
+    def value_fits(self) -> bool:
+        """Whether the value fits the emit width. An implicit one always fits.
+
+        The single source of truth for the magnitude check, shared by the parser
+        (which validates input) and the eDSL builder/editor (which validate
+        generated and edited features), so the two cannot drift.
+        """
+        if self.value is None:
+            return True
+        return self.value.value < (1 << self.width)
+
 
 @dataclass(frozen=True, slots=True)
 class FasmLine:
@@ -120,6 +132,7 @@ class FasmLine:
 
     @property
     def is_blank(self) -> bool:
+        """True when the line has no feature, annotations, or comment."""
         return self.feature is None and not self.annotations and self.comment is None
 
 
@@ -130,19 +143,21 @@ class FasmFile:
     lines: tuple[FasmLine, ...] = ()
 
     def __iter__(self) -> Iterator[FasmLine]:
+        """Iterate over the lines."""
         return iter(self.lines)
 
     def __len__(self) -> int:
+        """Return the number of lines."""
         return len(self.lines)
 
     def __getitem__(self, index: int) -> FasmLine:
+        """Return the line at ``index``."""
         return self.lines[index]
 
     # -- queries ----------------------------------------------------------
 
     def features(self) -> Iterator[SetFeature]:
-        """Yield every :class:`SetFeature` in order, skipping comment/annotation
-        only lines."""
+        """Yield every :class:`SetFeature` in order (comment-only lines skipped)."""
         for line in self.lines:
             if line.feature is not None:
                 yield line.feature
@@ -162,8 +177,9 @@ class FasmFile:
     def with_feature_prefix(self, prefix: str) -> "FasmFile":
         """Keep only feature lines whose feature name starts with ``prefix``."""
         return self.filter(
-            lambda line: line.feature is not None
-            and line.feature.name.startswith(prefix)
+            lambda line: (
+                line.feature is not None and line.feature.name.startswith(prefix)
+            )
         )
 
     def without_comments(self) -> "FasmFile":
@@ -202,7 +218,7 @@ class FasmFile:
         self,
         *,
         zero_function: Callable[[str], bool] | None = None,
-        sort_key: Callable[[str], object] | None = None,
+        sort_key: Callable[[str], Any] | None = None,
     ) -> "FasmFile":
         """Group, merge bit ranges, and sort. See :mod:`fasm_toolkit.transform`."""
         from fasm_toolkit.transform import merge_and_sort

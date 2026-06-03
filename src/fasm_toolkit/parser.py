@@ -11,10 +11,11 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
-from lark import Lark, Transformer, v_args
+from lark import Lark, Token, Transformer, v_args
 from lark.exceptions import LarkError, UnexpectedInput, VisitError
 from loguru import logger
 
+from fasm_toolkit.errors import FasmError, FasmSyntaxError, FasmValidationError
 from fasm_toolkit.ir import (
     Address,
     Annotation,
@@ -25,26 +26,18 @@ from fasm_toolkit.ir import (
     ValueFormat,
 )
 
-__all__ = ["parse_string", "parse_file", "FasmError", "FasmSyntaxError", "FasmValidationError"]
-
-
-class FasmError(Exception):
-    """Base class for all errors raised while parsing FASM."""
-
-
-class FasmSyntaxError(FasmError):
-    """Raised when the input does not conform to the FASM grammar."""
-
-
-class FasmValidationError(FasmError):
-    """Raised when input parses but violates a semantic rule (e.g. a value that
-    does not fit its address width)."""
+__all__ = [
+    "parse_string",
+    "parse_file",
+    "FasmError",
+    "FasmSyntaxError",
+    "FasmValidationError",
+]
 
 
 @dataclass(frozen=True, slots=True)
 class _ParsedValue:
-    """Carries the declared literal width alongside the value, so the transform
-    can validate it before discarding it."""
+    """Pairs a value with its declared literal width, for validation only."""
 
     value: FeatureValue
     declared_width: int | None
@@ -52,6 +45,25 @@ class _ParsedValue:
 
 def _digits(token: object) -> str:
     return str(token).replace("_", "")
+
+
+def _unescape_annotation_value(raw: str) -> str:
+    r"""Turn ESCAPED_STRING inner text into the logical annotation value.
+
+    The inverse of :func:`fasm_toolkit.emit.escape_annotation_value`: a backslash
+    escapes the character that follows it (so ``\"`` becomes ``"`` and ``\\``
+    becomes ``\``), which is what lets a value containing a quote round-trip.
+    """
+    out: list[str] = []
+    i = 0
+    while i < len(raw):
+        if raw[i] == "\\" and i + 1 < len(raw):
+            out.append(raw[i + 1])
+            i += 2
+        else:
+            out.append(raw[i])
+            i += 1
+    return "".join(out)
 
 
 class _ToIR(Transformer):
@@ -89,15 +101,16 @@ class _ToIR(Transformer):
                     f"declared width {parsed.declared_width} exceeds address "
                     f"width {width} for feature {feature!s}"
                 )
-            if value.value >= (1 << width):
-                raise FasmValidationError(
-                    f"value {value.value} does not fit in width {width} "
-                    f"for feature {feature!s}"
-                )
-        return SetFeature(name=str(feature), address=address, value=value)
+        result = SetFeature(name=str(feature), address=address, value=value)
+        if value is not None and not result.value_fits():
+            raise FasmValidationError(
+                f"value {value.value} does not fit in width {result.width} "
+                f"for feature {feature!s}"
+            )
+        return result
 
     @v_args(inline=True)
-    def address(self, first: object, second: object | None) -> Address:
+    def address(self, first: Token, second: Token | None) -> Address:
         # Written [high:low]; for a single index [n] the grammar leaves the
         # second slot empty.
         if second is None:
@@ -109,14 +122,19 @@ class _ToIR(Transformer):
 
     @v_args(inline=True)
     def annotation(self, name: object, value: object) -> Annotation:
-        # ESCAPED_STRING includes the surrounding quotes; strip them.
-        return Annotation(name=str(name), value=str(value)[1:-1])
+        # ESCAPED_STRING includes the surrounding quotes; strip them, then
+        # resolve escapes so the IR holds the logical value (emit re-escapes).
+        return Annotation(
+            name=str(name), value=_unescape_annotation_value(str(value)[1:-1])
+        )
 
     # -- value alternatives ----------------------------------------------
 
     def _sized(self, items: list, base: int, fmt: ValueFormat) -> _ParsedValue:
         declared_width = int(str(items[0])) if len(items) == 2 else None
-        return _ParsedValue(FeatureValue(int(_digits(items[-1]), base), fmt), declared_width)
+        return _ParsedValue(
+            FeatureValue(int(_digits(items[-1]), base), fmt), declared_width
+        )
 
     def hex_value(self, items: list) -> _ParsedValue:
         return self._sized(items, 16, ValueFormat.VERILOG_HEX)
@@ -131,7 +149,9 @@ class _ToIR(Transformer):
         return self._sized(items, 8, ValueFormat.VERILOG_OCTAL)
 
     def plain_value(self, items: list) -> _ParsedValue:
-        return _ParsedValue(FeatureValue(int(_digits(items[0]), 10), ValueFormat.PLAIN), None)
+        return _ParsedValue(
+            FeatureValue(int(_digits(items[0]), 10), ValueFormat.PLAIN), None
+        )
 
 
 def _build_parser() -> Lark:
