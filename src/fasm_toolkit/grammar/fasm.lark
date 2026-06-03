@@ -1,0 +1,45 @@
+// Grammar for the FPGA Assembly (FASM) format.
+//
+// FASM is line oriented. Spaces and tabs are insignificant, newlines delimit
+// lines, and comments run to the end of a line. Blank lines carry no
+// information and are dropped while building the IR (see parser.py).
+
+start: fasm_line*
+
+// A line may carry a feature assignment, annotations, a comment, any
+// combination of those, or nothing at all (a blank line).
+fasm_line: [set_feature] [annotations] [COMMENT] _NL
+
+set_feature: FEATURE [address] ["=" value]
+
+address: "[" DEC [":" DEC] "]"
+
+// A Verilog-style sized value (8'hFF), an unsized value ('hFF), or a plain
+// decimal (42). The leading DEC of a sized value is the declared width.
+value: DEC "'" "h" HEX     -> hex_value
+     |     "'" "h" HEX     -> hex_value
+     | DEC "'" "b" BIN     -> bin_value
+     |     "'" "b" BIN     -> bin_value
+     | DEC "'" "d" DEC     -> dec_value
+     |     "'" "d" DEC     -> dec_value
+     | DEC "'" "o" OCT     -> oct_value
+     |     "'" "o" OCT     -> oct_value
+     | DEC                 -> plain_value
+
+annotations: "{" annotation ("," annotation)* "}"
+annotation: ANNOTATION_NAME "=" ESCAPED_STRING
+
+FEATURE: /[a-zA-Z][0-9a-zA-Z_.]*/
+ANNOTATION_NAME: /[.a-zA-Z][0-9a-zA-Z_]*/
+
+DEC: /[0-9][0-9_]*/
+HEX: /[0-9a-fA-F][0-9a-fA-F_]*/
+BIN: /[01][01_]*/
+OCT: /[0-7][0-7_]*/
+
+COMMENT: /#[^\n\r]*/
+_NL: /\r?\n/
+
+%import common.ESCAPED_STRING
+%import common.WS_INLINE
+%ignore WS_INLINE
