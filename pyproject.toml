@@ -1,10 +1,19 @@
 [project]
 name = "fasm-toolkit"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A modern FPGA Assembly (FASM) parser and manipulation toolkit, built on Lark with a typed IR"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }
+authors = [
+    { name = "Kelvin Chung", email = "kinglokchung2000@gmail.com" },
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+]
 dependencies = [
     "lark>=1.1",
     "typer>=0.12",
@@ -14,19 +23,47 @@ dependencies = [
 [project.scripts]
 fasm-toolkit = "fasm_toolkit.cli:app"
 
+[project.urls]
+Homepage = "https://github.com/KelvinChung2000/fasm-toolkit"
+Repository = "https://github.com/KelvinChung2000/fasm-toolkit"
+
 [project.optional-dependencies]
-dev = [
-    "pytest>=8",
-    "pytest-mock>=3.12",
-]
+docs = ["sphinx", "sphinx-rtd-theme", "myst-parser"]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.version.raw-options]
+version_scheme = "post-release"
+local_scheme = "no-local-version"
+# Allow building before the first git tag exists (e.g. fresh clones, CI).
+fallback_version = "0.0.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fasm_toolkit"]
 
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-mock>=3.12",
+    "ruff",
+    "ty",
+    "pre-commit",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+
+[tool.ty.environment]
+python-version = "3.11"
+
+# Type-check the shipped library strictly; tests are exercised by pytest and
+# intentionally access narrowed Optionals (e.g. line.feature.name) that ty
+# cannot prove non-None without verbose assertions.
+[tool.ty.src]
+include = ["src/"]

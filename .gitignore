@@ -8,3 +8,13 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Sphinx documentation
+docs/_build/

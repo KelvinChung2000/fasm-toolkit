@@ -54,18 +54,60 @@ fasm-toolkit merge FILE          # merge bit ranges and sort
 fasm-toolkit parse FILE          # dump the IR for inspection
 ```
 
+Data goes to stdout, so commands stay pipeable. Add `-v` (info) or `-vv`
+(debug) to send logs to stderr.
+
+## Logging
+
+Logging uses [loguru](https://github.com/Delgan/loguru). Following loguru's
+guidance for libraries, fasm-toolkit stays silent by default. A consuming
+application turns it on with one call.
+
+```python
+from loguru import logger
+
+logger.enable("fasm_toolkit")   # opt in
+```
+
+The `fasm-toolkit` command enables it automatically and exposes the level
+through `-v` / `-vv`.
+
 ## Development
 
-Dependencies are managed with [uv](https://github.com/astral-sh/uv).
+Dependencies are managed with [uv](https://github.com/astral-sh/uv). The `dev`
+dependency group is installed by default.
 
 ```
-uv sync --extra dev   # set up the environment
-uv run pytest         # run the test suite
+uv sync                 # set up the environment (includes dev tools)
+uv run pytest           # run the test suite
+uv run ruff check       # lint
+uv run ruff format      # format
+uv run ty check         # type-check the library
+uv sync --extra docs && uv run sphinx-build -b html docs docs/_build/html  # docs
 ```
+
+Install the git hooks with `uv run pre-commit install`.
 
 The parity tests in `tests/test_parity.py` compare output against a reference
 `fasm` checkout in a sibling `../fasm` directory and are skipped when it is not
 present.
+
+## Releasing
+
+Releases are automated with
+[release-please](https://github.com/googleapis/release-please) and published to
+PyPI by GitHub Actions:
+
+- Commits to `master` use [Conventional Commits](https://www.conventionalcommits.org/)
+  (`feat:`, `fix:`, ...). release-please opens and maintains a release PR with the
+  next version and changelog.
+- Merging that PR tags the release, which triggers a build (`uv build`) and
+  publish (`uv publish`) to PyPI.
+- The version is derived from the git tag by `hatch-vcs`, so it never needs to be
+  edited by hand.
+
+Publishing requires a `PYPI_TOKEN` repository secret. The release workflow can
+also be run manually via *workflow_dispatch* to publish the latest tag.
 
 ## Status and roadmap
 
