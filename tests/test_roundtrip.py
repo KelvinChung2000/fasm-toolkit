@@ -1,8 +1,8 @@
 """Round-trip idempotency: parse(emit(parse(x))) == parse(x)."""
 
 import pytest
-
 from conftest import EXAMPLES, example
+
 from fasm_toolkit import parse_file, parse_string
 
 ROUND_TRIP_CASES = [
@@ -25,21 +25,21 @@ ROUND_TRIP_CASES = [
 
 
 @pytest.mark.parametrize("text", ROUND_TRIP_CASES)
-def test_string_round_trip(text):
+def test_string_round_trip(text: str) -> None:
     once = parse_string(text)
     twice = parse_string(once.to_string())
     assert once.lines == twice.lines
 
 
 @pytest.mark.parametrize("name", EXAMPLES)
-def test_example_round_trip(name):
+def test_example_round_trip(name: str) -> None:
     once = parse_file(example(name))
     twice = parse_string(once.to_string())
     assert once.lines == twice.lines
 
 
 @pytest.mark.parametrize("name", EXAMPLES)
-def test_example_canonical_round_trip(name):
+def test_example_canonical_round_trip(name: str) -> None:
     """Canonical output is itself valid FASM and is canonical-stable."""
     file = parse_file(example(name))
     canonical_text = file.to_string(canonical=True)

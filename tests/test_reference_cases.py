@@ -15,10 +15,10 @@ The original ``check_round_trip`` asserted ``parse(emit(x)) == x``; the same
 invariant is checked here on the IR.
 """
 
-import pytest
-
 from conftest import example
+
 from fasm_toolkit import (
+    FasmFile,
     FasmLine,
     SetFeature,
     parse_file,
@@ -26,20 +26,20 @@ from fasm_toolkit import (
 )
 
 
-def check_round_trip(file):
+def check_round_trip(file: FasmFile) -> None:
     """Reference invariant: parsing the emitted text yields equal IR."""
     text = file.to_string()
     assert parse_string(text).lines == file.lines
 
 
-def test_blank_file():
-    # Reference: result == []
+def test_blank_file() -> None:
+    # Reference test_blank_file expects a blank file to parse to no lines.
     result = parse_file(example("blank.fasm"))
     assert result.lines == ()
     check_round_trip(result)
 
 
-def test_comment_file():
+def test_comment_file() -> None:
     # Reference: [FasmLine(set_feature=None, annotations=None,
     #                      comment=' Only a comment.')]
     result = parse_file(example("comment.fasm"))
@@ -47,7 +47,7 @@ def test_comment_file():
     check_round_trip(result)
 
 
-def test_one_line_feature():
+def test_one_line_feature() -> None:
     # Reference: [FasmLine(SetFasmFeature('EXAMPLE_FEATURE.X0.Y0.BLAH',
     #             start=None, end=None, value=1, value_format=None))]
     result = parse_file(example("feature_only.fasm"))
@@ -58,7 +58,7 @@ def test_one_line_feature():
     check_round_trip(result)
 
 
-def test_examples_file():
+def test_examples_file() -> None:
     # Reference: round-trips the comprehensive many.fasm example.
     result = parse_file(example("many.fasm"))
     check_round_trip(result)

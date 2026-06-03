@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-import pytest
+from pytest_mock import MockerFixture
 from typer.testing import CliRunner
 
 import fasm_toolkit.cli as cli_module
@@ -18,40 +18,50 @@ def _write(tmp_path: Path, text: str) -> Path:
     return file
 
 
-def test_format_command(tmp_path):
+def test_format_command(tmp_path: Path) -> None:
     file = _write(tmp_path, "a[3:0]   =   4'b1010\n")
     result = runner.invoke(app, ["format", str(file)])
     assert result.exit_code == 0
     assert result.stdout == "a[3:0] = 4'b1010\n"
 
 
-def test_canonicalize_command(tmp_path):
+def test_canonicalize_command(tmp_path: Path) -> None:
     file = _write(tmp_path, "a[3:0] = 4'b1010\n")
     result = runner.invoke(app, ["canonicalize", str(file)])
     assert result.exit_code == 0
     assert result.stdout == "a[1]\na[3]\n"
 
 
-def test_merge_command(tmp_path):
+def test_merge_command(tmp_path: Path) -> None:
     file = _write(tmp_path, "a[0] = 1\na[1] = 1\n")
     result = runner.invoke(app, ["merge", str(file)])
     assert result.exit_code == 0
     assert result.stdout == "a[1:0] = 2'b11\n"
 
 
-def test_parse_command_dumps_ir(tmp_path):
+def test_parse_command_dumps_ir(tmp_path: Path) -> None:
     file = _write(tmp_path, "feat\n")
     result = runner.invoke(app, ["parse", str(file)])
     assert result.exit_code == 0
     assert "SetFeature" in result.stdout
 
 
-def test_missing_file_is_an_error():
+def test_missing_file_is_an_error() -> None:
     result = runner.invoke(app, ["format", "/no/such/file.fasm"])
     assert result.exit_code != 0
 
 
-def test_parse_error_reports_and_exits_nonzero(tmp_path, mocker):
+def test_merge_conflict_reports_error_without_traceback(tmp_path: Path) -> None:
+    file = _write(tmp_path, "A[0] = 1\nA[0] = 0\n")
+    result = runner.invoke(app, ["merge", str(file)])
+    assert result.exit_code == 1
+    assert "error:" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_parse_error_reports_and_exits_nonzero(
+    tmp_path: Path, mocker: MockerFixture
+) -> None:
     file = _write(tmp_path, "feat\n")
     mocker.patch.object(
         cli_module,
